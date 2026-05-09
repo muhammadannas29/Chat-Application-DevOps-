@@ -1,0 +1,6 @@
+{
+  "watch": ["src", ".env"],
+  "ext": "js,json,prisma",
+  "ignore": ["src/prisma/seed.js"],
+  "exec": "node src/index.js"
+}

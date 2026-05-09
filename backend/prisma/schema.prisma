@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(uuid())
+  name             String    @db.VarChar(80)
+  email            String    @unique @db.VarChar(255)
+  passwordHash     String    @map("password_hash")
+  isVerified       Boolean   @default(false) @map("is_verified")
+  refreshTokenHash String?   @map("refresh_token_hash")
+  lastLoginAt      DateTime? @map("last_login_at")
+  isOnline         Boolean   @default(false) @map("is_online")
+  lastSeenAt       DateTime? @map("last_seen_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+
+  @@map("users")
+}
+
+model Message {
+  id         String      @id @default(uuid())
+  content    String      @db.Text
+  senderId   String      @map("sender_id")
+  receiverId String      @map("receiver_id")
+  isRead     Boolean     @default(false) @map("is_read")
+  readAt     DateTime?   @map("read_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  sender     User        @relation("SentMessages",     fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver   User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, isRead])
+  @@index([createdAt])
+  @@map("messages")
+}
