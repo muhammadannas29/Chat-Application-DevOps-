@@ -20,7 +20,6 @@ model User {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  // Relations
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
 
@@ -28,17 +27,28 @@ model User {
 }
 
 model Message {
-  id         String      @id @default(uuid())
-  content    String      @db.Text
-  senderId   String      @map("sender_id")
-  receiverId String      @map("receiver_id")
-  isRead     Boolean     @default(false) @map("is_read")
-  readAt     DateTime?   @map("read_at")
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  id         String    @id @default(uuid())
 
-  sender     User        @relation("SentMessages",     fields: [senderId],   references: [id], onDelete: Cascade)
-  receiver   User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  // Text content — nullable because a message can be file-only
+  content    String?   @db.Text
+
+  senderId   String    @map("sender_id")
+  receiverId String    @map("receiver_id")
+
+  // ── File attachment fields (all nullable) ─────────────────────────────────
+  fileUrl    String?   @map("file_url")    // full S3 URL for retrieval
+  fileKey    String?   @map("file_key")    // S3 object key (for deletion)
+  fileName   String?   @map("file_name")   // original filename shown in UI
+  fileType   String?   @map("file_type")   // MIME type e.g. image/jpeg
+  fileSize   Int?      @map("file_size")   // size in bytes
+
+  isRead     Boolean   @default(false) @map("is_read")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  sender     User      @relation("SentMessages",     fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver   User      @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([senderId, receiverId])
   @@index([receiverId, isRead])

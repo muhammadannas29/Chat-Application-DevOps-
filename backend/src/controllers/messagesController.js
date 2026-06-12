@@ -1,6 +1,22 @@
 import prisma from '../config/prisma.js'
 
-// GET /api/messages/:userId — conversation between current user and another user
+// ── Shared select shape — always return file fields too ───────────────────────
+const MESSAGE_SELECT = {
+  id:         true,
+  content:    true,
+  senderId:   true,
+  receiverId: true,
+  fileUrl:    true,
+  fileKey:    true,
+  fileName:   true,
+  fileType:   true,
+  fileSize:   true,
+  isRead:     true,
+  readAt:     true,
+  createdAt:  true,
+}
+
+// GET /api/messages/:userId
 export async function getConversation(req, res, next) {
   try {
     const { userId } = req.params
@@ -9,33 +25,18 @@ export async function getConversation(req, res, next) {
     const messages = await prisma.message.findMany({
       where: {
         OR: [
-          { senderId: myId,    receiverId: userId },
-          { senderId: userId,  receiverId: myId   },
+          { senderId: myId,   receiverId: userId },
+          { senderId: userId, receiverId: myId   },
         ],
       },
       orderBy: { createdAt: 'asc' },
-      select: {
-        id:        true,
-        content:   true,
-        senderId:  true,
-        receiverId:true,
-        isRead:    true,
-        readAt:    true,
-        createdAt: true,
-      },
+      select:  MESSAGE_SELECT,
     })
 
     // Mark unread messages from the other user as read
     await prisma.message.updateMany({
-      where: {
-        senderId:   userId,
-        receiverId: myId,
-        isRead:     false,
-      },
-      data: {
-        isRead: true,
-        readAt: new Date(),
-      },
+      where:  { senderId: userId, receiverId: myId, isRead: false },
+      data:   { isRead: true, readAt: new Date() },
     })
 
     res.json({ messages })
@@ -44,7 +45,7 @@ export async function getConversation(req, res, next) {
   }
 }
 
-// GET /api/messages/unread-counts — unread count per sender for current user
+// GET /api/messages/unread-counts
 export async function getUnreadCounts(req, res, next) {
   try {
     const counts = await prisma.message.groupBy({
@@ -53,30 +54,39 @@ export async function getUnreadCounts(req, res, next) {
       _count: { id: true },
     })
 
-    // Shape: { senderId: count }
     const result = {}
     counts.forEach((c) => { result[c.senderId] = c._count.id })
-
     res.json({ unreadCounts: result })
   } catch (err) {
     next(err)
   }
 }
 
-// POST /api/messages — save a message (used as fallback if WS fails)
+// POST /api/messages — REST fallback (text or file message)
 export async function saveMessage(req, res, next) {
   try {
-    const { receiverId, content } = req.body
-    if (!receiverId || !content?.trim()) {
-      return res.status(400).json({ message: 'receiverId and content are required' })
+    const {
+      receiverId, content,
+      fileUrl, fileKey, fileName, fileType, fileSize,
+    } = req.body
+
+    // Must have either text content or a file
+    if (!receiverId || (!content?.trim() && !fileUrl)) {
+      return res.status(400).json({ message: 'receiverId and content or file are required' })
     }
 
     const message = await prisma.message.create({
       data: {
         senderId:   req.user.id,
         receiverId,
-        content:    content.trim(),
+        content:    content?.trim() || null,
+        fileUrl:    fileUrl   || null,
+        fileKey:    fileKey   || null,
+        fileName:   fileName  || null,
+        fileType:   fileType  || null,
+        fileSize:   fileSize  || null,
       },
+      select: MESSAGE_SELECT,
     })
 
     res.status(201).json({ message })
