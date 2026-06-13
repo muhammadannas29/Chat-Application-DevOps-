@@ -1,27 +1,10 @@
-version: '3.9'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: auth_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: yourpassword
-      POSTGRES_DB: auth_app
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
+  # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: auth_redis
+    container_name: chatapp_redis
     restart: unless-stopped
     ports:
       - '6379:6379'
@@ -33,7 +16,58 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - chatapp_network
+
+  # ── Backend ────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    container_name: chatapp_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env          # loads all your env vars including DATABASE_URL
+    environment:
+      NODE_ENV:   production
+      PORT:       5000
+      REDIS_URL:  redis://redis:6379   # override to use container redis
+      CLIENT_URL: http://localhost:80
+    ports:
+      - '5000:5000'             # expose for direct API testing
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:5000/api/health']
+      interval: 30s
+      timeout:  10s
+      retries:  3
+      start_period: 30s
+    networks:
+      - chatapp_network
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_WS_URL:  ws://localhost/ws
+    container_name: chatapp_frontend
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - chatapp_network
 
 volumes:
-  postgres_data:
   redis_data:
+
+networks:
+  chatapp_network:
+    driver: bridge
